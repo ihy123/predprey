@@ -208,49 +208,6 @@ static void preds_step()
     }
 }
 
-/*
- * pred:
- * turn prey to pred and increase satiety
- * move to empty cell
- * decrease satiety
- * prey:
- * increase health
- * move to empty cell
- * turn empty to prey if enough health
- */
-
-/*
- * controls:
- *   pause (space, p)
- *   clean (backspace, del)
- *   exit (esc)
- *   add mode (a):
- *     add pred (lmb)
- *     add prey (rmb)
- *   del mode (d):
- *     del (lmb, rmb)
- *
- * settings:
- *   field size
- *   tick rate (per second)
- *   fps limit
- *   stats averaging interval
- *   graphing interval
- *   balance:
- *     preset:
- *       30x30
- *       60x60+
- *     max health/satiety
- *     wrapping field
- *     satiety min for birth
- *     satiety max for hunting
- *     satiety decrement
- *     satiety penalty for birth
- *     satiety to health ratio
- *     health min for birth
- *     health increment
- *     health penalty for birth
- */
 int main(int argc, char **argv)
 {
     enum state state = STATE_MENU;
