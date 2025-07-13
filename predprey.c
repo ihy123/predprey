@@ -1,285 +1,42 @@
-#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 
 #include <raylib.h>
 
+#include "game.h"
 #include "util.h"
-
-enum cell_type {
-    CELL_EMPTY = 0,
-    CELL_PRED,
-    CELL_PREY
-};
-
-struct cell {
-    enum cell_type type;
-    union {
-        int satiety;
-        int health;
-        int value;
-    };
-};
-
-typedef int (*fn_neighbourhood)(int x, int y, int w, int h, int *idx_out);
-
-struct game {
-    /* the field */
-    struct cell *c;
-    /* maps cell to bool: true if a cell was already handled in cur step */
-    unsigned char *handled;
-    int w;
-    int h;
-    int cells_cap; /* capaticy of the <cells> and <handled> buffers */
-
-    /* stats */
-    int preys;
-    int preds;
-    int preys_avg;
-    int preds_avg;
-    int preys_std;
-    int preds_std;
-    int health_avg;
-    int satiety_avg;
-};
-static struct game g;
-
-struct settings {
-    /* settings */
-    int target_fps;
-    int target_fps_prev;
-    int tick_rate;
-
-    /* adjustable coefficients, for balance */
-    int value_max;
-    fn_neighbourhood neighbourhood;
-
-    int satiety_min_for_birth;
-    int satiety_max_for_hunting;
-    int satiety_decrement;
-    int satiety_penalty_for_birth;
-    float satiety_to_health_ratio;
-
-    int health_min_for_birth;
-    int health_increment;
-    int health_penalty_for_birth;
-};
-static struct settings s;
-
-static void prey_feed(struct cell *c)
-{
-    c->health = min(c->health + s.health_increment, s.value_max);
-}
-
-static int prey_move(struct cell *c, int *neighbours, int count)
-{
-    int i;
-    for (i = 0; i < count; i++) {
-        struct cell *n = &g.c[neighbours[i]];
-        if (n->type == CELL_EMPTY) {
-            /* move to destination cell */
-            n->type = CELL_PREY;
-            n->health = c->health;
-            if (n->health >= s.health_min_for_birth) {
-                /* leave child in source cell */
-                n->health -= s.health_penalty_for_birth;
-                if (n->health <= 0)
-                    n->type = CELL_EMPTY;
-            } else {
-                c->type = CELL_EMPTY;
-            }
-            g.handled[neighbours[i]] = 1;
-            return 1;
-        }
-    }
-    return 0;
-}
-
-static void preys_step()
-{
-    int x, y;
-    for (x = 0; x < g.w; x++) {
-        for (y = 0; y < g.h; y++) {
-            int ci = y * g.w + x;
-            if (g.handled[ci])
-                continue;
-
-            struct cell *c = &g.c[ci];
-            if (c->type != CELL_PREY)
-                continue;
-
-            prey_feed(c);
-
-            int neighbours[8];
-            int count = s.neighbourhood(x, y, g.w, g.h, neighbours);
-
-            int moved = prey_move(c, neighbours, count);
-            if (!moved)
-                c->type = CELL_EMPTY;
-
-            g.handled[ci] = 1;
-        }
-    }
-}
-
-static int pred_hunt(struct cell *c, int *neighbours, int count)
-{
-    int i;
-    for (i = 0; i < count; i++) {
-        struct cell *n = &g.c[neighbours[i]];
-        if (n->type == CELL_PREY) {
-            /* move to destination cell, consume prey */
-            n->type = CELL_PRED;
-            c->satiety += s.satiety_to_health_ratio * n->health;
-            n->satiety = c->satiety = min(c->satiety, s.value_max);
-
-            if (n->satiety >= s.satiety_min_for_birth) {
-                /* leave child in source cell */
-                n->satiety -= s.satiety_penalty_for_birth;
-                if (n->satiety <= 0)
-                    n->type = CELL_EMPTY;
-            } else {
-                c->type = CELL_EMPTY;
-            }
-
-            g.handled[neighbours[i]] = 1;
-            return 1;
-        }
-    }
-    return 0;
-}
-
-static int pred_move(struct cell *c, int *neighbours, int count)
-{
-    int i;
-    for (i = 0; i < count; i++) {
-        struct cell *n = &g.c[neighbours[i]];
-        if (n->type == CELL_EMPTY) {
-            /* move to destination cell */
-            n->type = CELL_PRED;
-            n->satiety = c->satiety;
-
-            if (n->satiety >= s.satiety_min_for_birth) {
-                /* leave child in source cell */
-                n->satiety -= s.satiety_penalty_for_birth;
-                if (n->satiety <= 0)
-                    n->type = CELL_EMPTY;
-            } else {
-                c->type = CELL_EMPTY;
-            }
-
-            g.handled[neighbours[i]] = 1;
-            return 1;
-        }
-    }
-    return 0;
-}
-
-static void preds_step()
-{
-    int x, y;
-    for (x = 0; x < g.w; x++) {
-        for (y = 0; y < g.h; y++) {
-            int ci = y * g.w + x;
-            if (g.handled[ci])
-                continue;
-
-            struct cell *c = &g.c[ci];
-            if (c->type != CELL_PRED)
-                continue;
-
-            int neighbours[8];
-            int count = s.neighbourhood(x, y, g.w, g.h, neighbours);
-
-            int moved = 0;
-            if (c->satiety <= s.satiety_max_for_hunting)
-                moved = pred_hunt(c, neighbours, count);
-
-            if (!moved) {
-                c->satiety -= s.satiety_decrement;
-                if (c->satiety > 0)
-                    moved = pred_move(c, neighbours, count);
-            }
-
-            if (!moved)
-                c->type = CELL_EMPTY;
-
-            g.handled[ci] = 1;
-        }
-    }
-}
-
-static void calc_stats()
-{
-    g.preds = g.preys = 0;
-
-    int i;
-    for (i = 0; i < g.w * g.h; i++) {
-        struct cell c = g.c[i];
-        if (c.type == CELL_PRED) {
-            g.preds++;
-        } else if (c.type == CELL_PREY) {
-            g.preys++;
-        }
-    }
-}
-
-static float simulate(float elapsed)
-{
-    float tick_dur = 1.0f / s.tick_rate;
-    int recalc_stats = elapsed >= tick_dur;
-
-    while (elapsed >= tick_dur) {
-        elapsed -= tick_dur;
-
-        memset(g.handled, 0, g.w * g.h);
-        preys_step();
-        preds_step();
-    }
-
-    if (recalc_stats)
-        calc_stats();
-
-    return elapsed;
-}
-
-static void game_resize()
-{
-    int size = g.w * g.h;
-    if (g.cells_cap < size) {
-        free(g.c);
-        free(g.handled);
-
-        g.cells_cap = max(size, 1.5f * g.cells_cap);
-        g.c = calloc(g.cells_cap, sizeof(*g.c));
-        g.handled = calloc(g.cells_cap, sizeof(*g.handled));
-    }
-}
-
-static void game_clean()
-{
-    memset(g.c, 0, g.cells_cap * sizeof(*g.c));
-    memset(g.handled, 0, g.cells_cap * sizeof(*g.handled));
-}
 
 enum field_mode {
     MODE_ADD,
     MODE_DEL
 };
 
-static const Color col_pred = RED;
-static const Color col_prey = GREEN;
-static const Color col_field = WHITE;
-static const Color col_sidebar = LIGHTGRAY;
-static const Color col_sidebar_text = BLACK;
-static const Color col_sidebar_text_sel = MAROON;
+struct ui {
+    int sidebar_w;
+    int sidebar_margin;
+
+    int target_fps;
+    int target_fps_prev;
+    int w_prev;
+    int h_prev;
+    enum field_mode sel_mode;
+    RenderTexture2D field_texture;
+
+    Color col_pred;
+    Color col_prey;
+    Color col_field;
+    Color col_sidebar;
+    Color col_sidebar_text;
+    Color col_sidebar_text_sel;
+};
+static struct ui ui;
 
 static int sel_setting = 0;
 
 static void setting_int(int idx, Rectangle bounds, const char *label,
         int *val, int min_val, int max_val)
 {
-    Color col = idx == sel_setting ? col_sidebar_text_sel : col_sidebar_text;
+    Color col = idx == sel_setting ? ui.col_sidebar_text_sel : ui.col_sidebar_text;
 
     /* value */
     char num[32];
@@ -327,9 +84,9 @@ static void handle_settings(Rectangle bounds)
     num_settings = 0;
     bounds.height = 30;
 
-    setting_int(num_settings++, bounds, "Tick rate", &s.tick_rate, 1, 120);
+    setting_int(num_settings++, bounds, "Tick rate", &g.tick_rate, 1, 120);
     bounds.y += bounds.height;
-    setting_int(num_settings++, bounds, "Target FPS", &s.target_fps, 0, 120);
+    setting_int(num_settings++, bounds, "Target FPS", &ui.target_fps, 0, 120);
     bounds.y += bounds.height;
 
     setting_int(num_settings++, bounds, "Width", &g.w, 5, 400);
@@ -337,82 +94,89 @@ static void handle_settings(Rectangle bounds)
     setting_int(num_settings++, bounds, "Height", &g.h, 5, 400);
     bounds.y += bounds.height;
 
-    int wrap = s.neighbourhood == neighbourhood4wrap;
+    int wrap = g.neighbourhood == neighbourhood4wrap;
     setting_int(num_settings++, bounds, "Wrap field", &wrap, 0, 1);
     bounds.y += bounds.height;
-    s.neighbourhood = wrap ? neighbourhood4wrap : neighbourhood4;
+    g.neighbourhood = wrap ? neighbourhood4wrap : neighbourhood4;
 
-    setting_int(num_settings++, bounds, "sat birth", &s.satiety_min_for_birth, 0, s.value_max);
+    setting_int(num_settings++, bounds, "sat birth", &g.satiety_min_for_birth, 0, g.value_max);
     bounds.y += bounds.height;
-    setting_int(num_settings++, bounds, "sat hunt", &s.satiety_max_for_hunting, 0, s.value_max);
+    setting_int(num_settings++, bounds, "sat hunt", &g.satiety_max_for_hunting, 0, g.value_max);
     bounds.y += bounds.height;
-    setting_int(num_settings++, bounds, "sat dec", &s.satiety_decrement, 0, s.value_max);
+    setting_int(num_settings++, bounds, "sat dec", &g.satiety_decrement, 0, g.value_max);
     bounds.y += bounds.height;
-    setting_int(num_settings++, bounds, "sat birth dec", &s.satiety_penalty_for_birth, 0, s.value_max);
+    setting_int(num_settings++, bounds, "sat birth dec", &g.satiety_penalty_for_birth, 0, g.value_max);
     bounds.y += bounds.height;
 
     /* convert to % and round to nearest */
-    int sat_hp_rate = 0.5f + 100.0f * s.satiety_to_health_ratio;
+    int sat_hp_rate = 0.5f + 100.0f * g.satiety_to_health_ratio;
     setting_int(num_settings++, bounds, "sat/hp rate %", &sat_hp_rate, 0, 1000);
     bounds.y += bounds.height;
-    s.satiety_to_health_ratio = sat_hp_rate / 100.0f;
+    g.satiety_to_health_ratio = sat_hp_rate / 100.0f;
 
-    setting_int(num_settings++, bounds, "hp birth", &s.health_min_for_birth, 0, s.value_max);
+    setting_int(num_settings++, bounds, "hp birth", &g.health_min_for_birth, 0, g.value_max);
     bounds.y += bounds.height;
-    setting_int(num_settings++, bounds, "hp inc", &s.health_increment, 0, s.value_max);
+    setting_int(num_settings++, bounds, "hp inc", &g.health_increment, 0, g.value_max);
     bounds.y += bounds.height;
-    setting_int(num_settings++, bounds, "hp birth dec", &s.health_penalty_for_birth, 0, s.value_max);
+    setting_int(num_settings++, bounds, "hp birth dec", &g.health_penalty_for_birth, 0, g.value_max);
     bounds.y += bounds.height;
 }
 
-int main(int argc, char **argv)
+enum ui_colorscheme {
+    UI_COLORS_DEFAULT,
+    UI_COLORS_COUNT
+};
+
+void ui_colors(enum ui_colorscheme idx)
 {
-    s.target_fps = 30;
-    s.tick_rate = 30;
+    ui.col_pred = RED;
+    ui.col_prey = GREEN;
+    ui.col_field = WHITE;
+    ui.col_sidebar = LIGHTGRAY;
+    ui.col_sidebar_text = BLACK;
+    ui.col_sidebar_text_sel = MAROON;
+}
 
-    s.value_max = 100;
-
-    s.neighbourhood = neighbourhood4;
-    s.satiety_min_for_birth = 60;
-    s.satiety_max_for_hunting = 70;
-    s.satiety_decrement = 7;
-    s.satiety_penalty_for_birth = 30;
-    s.satiety_to_health_ratio = 0.2f;
-
-    s.health_min_for_birth = 70;
-    s.health_increment = 10;
-    s.health_penalty_for_birth = 50;
-
-    memset(&g, 0, sizeof(g));
-    g.w = 100;
-    g.h = 100;
-    int w_prev = g.w;
-    int h_prev = g.h;
-    game_resize();
+void ui_init_default()
+{
+    ui.target_fps = 30;
+    ui.w_prev = g.w;
+    ui.h_prev = g.h;
+    ui.sel_mode = MODE_ADD;
 
     SetTraceLogLevel(LOG_ERROR);
-    InitWindow(800, 500, "Predator-prey");
+    InitWindow(900, 600, "Predator-prey");
+    ui.sidebar_w = 300;
+    ui.sidebar_margin = 5;
     SetWindowState(FLAG_WINDOW_RESIZABLE);
 
-    SetTargetFPS(s.target_fps);
-    s.target_fps_prev = s.target_fps;
+    SetTargetFPS(ui.target_fps);
+    ui.target_fps_prev = ui.target_fps;
 
     /* TODO: don't render to a texture, but draw the field directly */
-    RenderTexture2D field_texture = LoadRenderTexture(g.w, g.h);
+    ui.field_texture = LoadRenderTexture(g.w, g.h);
 
-    enum field_mode sel_mode = MODE_ADD;
+    ui_colors(UI_COLORS_DEFAULT);
+}
 
+void ui_free()
+{
+    UnloadRenderTexture(ui.field_texture);
+    CloseWindow();
+}
+
+int ui_mainloop()
+{
     int simulating = 0;
     float elapsed = 0.0f; /* time passed since last tick */
+
     while (!WindowShouldClose()) {
         /* screen size */
         int sw = GetRenderWidth();
         int sh = GetRenderHeight();
-        /* sidebar rectangle */
-        int sbw = 300;
-        int sbh = sh;
-        int sbx = sw - sbw;
-        int sby = 0;
+        /* sidebar size */
+        Rectangle sb = { sw - ui.sidebar_w, 0, ui.sidebar_w, sh };
+        Rectangle field = { 0, 0, sb.x, sh };
 
         if (IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_P))
             simulating = !simulating;
@@ -421,28 +185,27 @@ int main(int argc, char **argv)
             game_clean();
 
         if (IsKeyPressed(KEY_A))
-            sel_mode = MODE_ADD;
+            ui.sel_mode = MODE_ADD;
         else if (IsKeyPressed(KEY_D))
-            sel_mode = MODE_DEL;
+            ui.sel_mode = MODE_DEL;
 
-        Rectangle rect = { 0, 0, sbx, sh };
         Vector2 mouse = GetMousePosition();
-        if (CheckCollisionPointRec(mouse, rect)) {
-            int x = (mouse.x - rect.x) / rect.width * g.w;
-            int y = (mouse.y - rect.y) / rect.height * g.h;
+        if (CheckCollisionPointRec(mouse, field)) {
+            int x = (mouse.x - field.x) / field.width * g.w;
+            int y = (mouse.y - field.y) / field.height * g.h;
             struct cell *c = &g.c[y * g.w + x];
 
             if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
-                if (sel_mode == MODE_ADD) {
+                if (ui.sel_mode == MODE_ADD) {
                     c->type = CELL_PRED;
-                    c->satiety = s.value_max;
+                    c->satiety = g.value_max;
                 } else {
                     c->type = CELL_EMPTY;
                 }
             } else if (IsMouseButtonDown(MOUSE_BUTTON_RIGHT)) {
-                if (sel_mode == MODE_ADD) {
+                if (ui.sel_mode == MODE_ADD) {
                     c->type = CELL_PREY;
-                    c->health = s.value_max;
+                    c->health = g.value_max;
                 } else {
                     c->type = CELL_EMPTY;
                 }
@@ -451,32 +214,36 @@ int main(int argc, char **argv)
 
         if (simulating) {
             elapsed += GetFrameTime();
-            elapsed = simulate(elapsed);
+            elapsed = game_simulate(elapsed);
         }
 
         BeginDrawing();
 
         /* menu sidebar */
-        rect = (Rectangle) { sbx + 5, sby + 5, sbw - 10, sbh - 10 };
-        DrawRectangle(sbx, sby, sbw, sbh, col_sidebar);
+        DrawRectangleRec(sb, ui.col_sidebar);
+        float m = ui.sidebar_margin;
+        Rectangle sb_content = {
+            sb.x + m, sb.y + m,
+            sb.width - 2 * m, sb.height - 2 * m
+        };
 
-        handle_settings(rect);
+        handle_settings(sb_content);
 
-        if (s.target_fps != s.target_fps_prev) {
-            s.target_fps_prev = s.target_fps;
-            SetTargetFPS(s.target_fps);
+        if (ui.target_fps != ui.target_fps_prev) {
+            ui.target_fps_prev = ui.target_fps;
+            SetTargetFPS(ui.target_fps);
         }
 
-        if (g.w != w_prev || g.h != h_prev) {
-            w_prev = g.w;
-            h_prev = g.h;
-            field_texture = LoadRenderTexture(g.w, g.h);
+        if (g.w != ui.w_prev || g.h != ui.h_prev) {
+            ui.w_prev = g.w;
+            ui.h_prev = g.h;
+            ui.field_texture = LoadRenderTexture(g.w, g.h);
             game_resize();
         }
 
         /* field */
-        BeginTextureMode(field_texture);
-        ClearBackground(col_field);
+        BeginTextureMode(ui.field_texture);
+        ClearBackground(ui.col_field);
 
         int x, y;
         for (x = 0; x < g.w; x++) {
@@ -486,8 +253,8 @@ int main(int argc, char **argv)
                 if (c.type == CELL_EMPTY)
                     continue;
 
-                Color col = c.type == CELL_PRED ? col_pred : col_prey;
-                int m = s.value_max;
+                Color col = c.type == CELL_PRED ? ui.col_pred : ui.col_prey;
+                int m = g.value_max;
                 col = ColorBrightness(col, (c.value - m) / (float)(2 * m));
                 DrawRectangle(x, y, 1, 1, col);
             }
@@ -495,14 +262,21 @@ int main(int argc, char **argv)
         EndTextureMode();
 
         Rectangle src = { 0, 0, g.w, -g.h };
-        Rectangle dst = { 0, 0, sbx, sh };
+        Rectangle dst = { 0, 0, sb.x, sh };
         Vector2 origin = { 0, 0 };
-        DrawTexturePro(field_texture.texture, src, dst, origin, 0.0f, WHITE);
+        DrawTexturePro(ui.field_texture.texture, src, dst, origin, 0.0f, WHITE);
 
         EndDrawing();
     }
-
-    UnloadRenderTexture(field_texture);
-    CloseWindow();
     return 0;
+}
+
+int main(int argc, char **argv)
+{
+    game_init_default();
+    ui_init_default();
+    int ret = ui_mainloop();
+    ui_free();
+    game_free();
+    return ret;
 }

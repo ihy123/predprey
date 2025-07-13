@@ -1,5 +1,5 @@
 NAME = predprey
-SRCS = predprey.c util.c
+SRCS = predprey.c game.c util.c
 OBJS = $(SRCS:.c=.o)
 HDRS = *.h
 CFLAGS += #-Wall -Wpedantic
