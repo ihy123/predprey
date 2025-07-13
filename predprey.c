@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <string.h>
+#include <math.h>
 
 #include <raylib.h>
 
@@ -20,7 +21,6 @@ struct ui {
     int w_prev;
     int h_prev;
     enum field_mode sel_mode;
-    RenderTexture2D field_texture;
 
     Color col_pred;
     Color col_prey;
@@ -153,15 +153,11 @@ void ui_init_default()
     SetTargetFPS(ui.target_fps);
     ui.target_fps_prev = ui.target_fps;
 
-    /* TODO: don't render to a texture, but draw the field directly */
-    ui.field_texture = LoadRenderTexture(g.w, g.h);
-
     ui_colors(UI_COLORS_DEFAULT);
 }
 
 void ui_free()
 {
-    UnloadRenderTexture(ui.field_texture);
     CloseWindow();
 }
 
@@ -237,15 +233,14 @@ int ui_mainloop()
         if (g.w != ui.w_prev || g.h != ui.h_prev) {
             ui.w_prev = g.w;
             ui.h_prev = g.h;
-            ui.field_texture = LoadRenderTexture(g.w, g.h);
             game_resize();
         }
 
         /* field */
-        BeginTextureMode(ui.field_texture);
-        ClearBackground(ui.col_field);
+        DrawRectangleRec(field, ui.col_field);
 
         int x, y;
+        Vector2 tile = { field.width / g.w, field.height / g.h };
         for (x = 0; x < g.w; x++) {
             for (y = 0; y < g.h; y++) {
                 struct cell c = g.c[y * g.w + x];
@@ -256,15 +251,11 @@ int ui_mainloop()
                 Color col = c.type == CELL_PRED ? ui.col_pred : ui.col_prey;
                 int m = g.value_max;
                 col = ColorBrightness(col, (c.value - m) / (float)(2 * m));
-                DrawRectangle(x, y, 1, 1, col);
+                DrawRectangle(
+                        floorf(x * tile.x), floorf(y * tile.y),
+                        ceilf(tile.x), ceilf(tile.y), col);
             }
         }
-        EndTextureMode();
-
-        Rectangle src = { 0, 0, g.w, -g.h };
-        Rectangle dst = { 0, 0, sb.x, sh };
-        Vector2 origin = { 0, 0 };
-        DrawTexturePro(ui.field_texture.texture, src, dst, origin, 0.0f, WHITE);
 
         EndDrawing();
     }
