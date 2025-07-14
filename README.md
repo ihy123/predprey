@@ -41,6 +41,8 @@ original cell and loose some satiety for giving birth
 
 ## Building
 
+### Linux
+
 Just run `make` if raylib is already installed.
 
 Otherwise install raylib to a system directory and run `make`, or use
@@ -52,3 +54,7 @@ env CFLAGS="-L/path/to/raylib/lib -I/path/to/raylib/include" make
 
 Makefile links raylib statically. If you want to link it dynamically, you
 have to modify the Makefile.
+
+### Windows
+
+Same as Linux except make's target. Use `make predprey.exe` instead of just `make`.
