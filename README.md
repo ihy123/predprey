@@ -38,3 +38,17 @@ original cell and loose some satiety for giving birth
   - del (lmb, rmb)
 - increase settings value (right arrow, mouse wheel up)
 - decrease settings value (left arrow, mouse wheel down)
+
+## Building
+
+Just run `make` if raylib is already installed.
+
+Otherwise install raylib to a system directory and run `make`, or use
+`CFLAGS` environment variable to explicitly tell compiler the path to
+directory where raylib is installed:
+```
+env CFLAGS="-L/path/to/raylib/lib -I/path/to/raylib/include" make
+```
+
+Makefile links raylib statically. If you want to link it dynamically, you
+have to modify the Makefile.
