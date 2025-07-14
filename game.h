@@ -31,15 +31,10 @@ struct game {
     int h;
     int cells_cap; /* capaticy of the <cells> and <handled> buffers */
 
-    /* stats */
-    int preys;
-    int preds;
-    //float preys_avg;
-    //float preds_avg;
-    //float preys_std;
-    //float preds_std;
-    //float health_avg;
-    //float satiety_avg;
+    struct {
+        int preys;
+        int preds;
+    } stat;
 
     /* settings */
     int tick_rate;
@@ -62,8 +57,10 @@ extern struct game g;
 void game_init_default();
 /* elapsed is time since last tick; returns updated time since last tick */
 float game_simulate(float elapsed);
+void game_add(enum cell_type type, int x, int y);
+void game_del(int x, int y);
 void game_resize();
-void game_clean();
+void game_clear();
 void game_free();
 
 #endif

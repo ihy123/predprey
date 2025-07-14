@@ -2,6 +2,9 @@
 
 A simple 2D simulation written in C using raylib.
 
+![](./screenshots/light.png)
+![](./screenshots/dark.png)
+
 ## Rules
 
 Preys feed from the ground and reproduce.
@@ -33,12 +36,5 @@ original cell and loose some satiety for giving birth
   - add prey (rmb)
 - del mode (d):
   - del (lmb, rmb)
-
-## Plans
-
-- stats
-- graphs?
-- UI:
-  - settings:
-    - stats averaging interval
-    - graphing interval
+- increase settings value (right arrow, mouse wheel up)
+- decrease settings value (left arrow, mouse wheel down)

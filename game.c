@@ -190,15 +190,15 @@ static void preds_step()
 
 static void calc_stats()
 {
-    g.preds = g.preys = 0;
+    memset(&g.stat, 0, sizeof(g.stat));
 
     int i;
     for (i = 0; i < g.w * g.h; i++) {
         struct cell c = g.c[i];
         if (c.type == CELL_PRED) {
-            g.preds++;
+            g.stat.preds++;
         } else if (c.type == CELL_PREY) {
-            g.preys++;
+            g.stat.preys++;
         }
     }
 }
@@ -246,6 +246,34 @@ float game_simulate(float elapsed)
     return elapsed;
 }
 
+void game_add(enum cell_type type, int x, int y)
+{
+    struct cell *c = &g.c[y * g.w + x];
+
+    game_del(x, y);
+    c->type = type;
+    c->value = g.value_max;
+
+    /* update stats */
+    if (type == CELL_PRED)
+        g.stat.preds++;
+    else if (type == CELL_PREY)
+        g.stat.preys++;
+}
+
+void game_del(int x, int y)
+{
+    struct cell *c = &g.c[y * g.w + x];
+
+    /* update stats */
+    if (c->type == CELL_PRED)
+        g.stat.preds--;
+    else if (c->type == CELL_PREY)
+        g.stat.preys--;
+
+    c->type = CELL_EMPTY;
+}
+
 void game_resize()
 {
     int size = g.w * g.h;
@@ -259,10 +287,11 @@ void game_resize()
     }
 }
 
-void game_clean()
+void game_clear()
 {
     memset(g.c, 0, g.cells_cap * sizeof(*g.c));
     memset(g.handled, 0, g.cells_cap * sizeof(*g.handled));
+    memset(&g.stat, 0, sizeof(g.stat));
 }
 
 void game_free()
