@@ -9,5 +9,6 @@ $(NAME): $(OBJS) $(HDRS)
 clean:
 	$(RM) *.o
 
+OBJS += winmain.c
 $(NAME).exe: $(OBJS) $(HDRS)
-	$(CC) $(CFLAGS) $(OBJS) -l:libraylib.a -lm -lgdi32 -lopengl32 -lwinmm $(LDFLAGS) -o $@
+	$(CC) -mwindows $(CFLAGS) $(OBJS) -l:libraylib.a -lm -lgdi32 -lopengl32 -lwinmm $(LDFLAGS) -o $@
