@@ -1,6 +1,7 @@
 # Predator-prey simulation
 
-A simple 2D simulation written in C using raylib.
+A simple 2D predator-prey simulation written in C using
+[raylib](https://github.com/raysan5/raylib).
 
 ![](./screenshots/light.png)
 ![](./screenshots/dark.png)
@@ -57,4 +58,5 @@ have to modify the Makefile.
 
 ### Windows
 
-Same as Linux except make's target. Use `make predprey.exe` instead of just `make`.
+Same as Linux except make's target. Use `make predprey.exe` instead of
+just `make`.
