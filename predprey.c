@@ -228,6 +228,11 @@ static void handle_field(Rectangle bounds)
 
 static void handle_add_del(Rectangle field)
 {
+    if (IsKeyPressed(KEY_A))
+        ui.sel_mode = UI_MODE_ADD;
+    else if (IsKeyPressed(KEY_D))
+        ui.sel_mode = UI_MODE_DEL;
+
     Vector2 mouse = GetMousePosition();
     if (CheckCollisionPointRec(mouse, field)) {
         int x = (mouse.x - field.x) / field.width * g.w;
@@ -259,11 +264,6 @@ int ui_mainloop()
 
         if (IsKeyPressed(KEY_DELETE))
             game_clear();
-
-        if (IsKeyPressed(KEY_A))
-            ui.sel_mode = UI_MODE_ADD;
-        else if (IsKeyPressed(KEY_D))
-            ui.sel_mode = UI_MODE_DEL;
 
         handle_add_del(field);
 
